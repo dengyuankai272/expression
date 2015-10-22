@@ -1,16 +1,26 @@
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
 
 public class Main {
   public static void main(String[] args) throws Exception {
-    new Main().evaluate();
+    String expression = "(1+2*(3+4))";
+    char[] chars = expression.toCharArray();
+    Character[] characters = new Character[chars.length];
+    int count = 0;
+    for (char c : chars) {
+      characters[count++] = c;
+    }
+
+    System.out.println(new Main().evaluate(Arrays.asList(characters).iterator()));
   }
 
-  public double evaluate(Iterable<Character> expression) throws Exception {
+  public double evaluate(Iterator<Character> expression) throws Exception {
     assert expression != null;
 
     // construct huffman tree
-    Node root = generateHuffmanTree(expression.iterator());
+    Node root = generateHuffmanTree(expression);
 
     // traverse the tree and calculate
     return calculate(root).get();
@@ -25,7 +35,6 @@ public class Main {
 
     // handle special first number such as -5, +3
     char nextChar = expression.next();
-    Node firstLeftNode = null;
     if (nextChar == '+' || nextChar == '-') {
       StringBuilder firstNumber = new StringBuilder();
       firstNumber.append(nextChar);
@@ -33,21 +42,11 @@ public class Main {
         firstNumber.append(nextChar);
       }
 
-      firstLeftNode = new NumberNode(Double.parseDouble(firstNumber.toString()));
-      if (!expression.hasNext()) {
+      Node firstLeftNode = new NumberNode(Double.parseDouble(firstNumber.toString()));
+      if (!expression.hasNext() || nextChar == ')') {
         return firstLeftNode;
       }
 
-    } else if (nextChar == '(') {
-      firstLeftNode = generateHuffmanTree(expression);
-      if (!expression.hasNext()) {
-        return firstLeftNode;
-      }
-
-      nextChar = expression.next();
-    }
-
-    if (firstLeftNode != null) {
       OperatorNode operatorNode = generateOpNode(nextChar);
       operatorNode.left = firstLeftNode;
       firstLeftNode.parent = operatorNode;
@@ -61,16 +60,19 @@ public class Main {
     do {
       OperatorNode temp = (OperatorNode) currentParent;
       OperatorNode opNode;
-      Node rightNode;
+      Node node;
       if (nextChar == '(') {
-        rightNode = generateHuffmanTree(expression);
-        if (!expression.hasNext()) {
-          temp.right = rightNode;
-          rightNode.parent = temp;
+        node = generateHuffmanTree(expression);
+        if (!expression.hasNext() || (nextChar = expression.next()) == ')') {
+          if (temp == null) {
+            currentParent = node;
+          } else {
+            temp.right = node;
+            node.parent = temp;
+          }
           continue;
         }
-        nextChar = expression.next();
-        opNode = generateOpNode(nextChar);
+
       } else if (Character.isDigit(nextChar)) {
         StringBuilder number = new StringBuilder();
         number.append(nextChar);
@@ -78,36 +80,35 @@ public class Main {
           number.append(nextChar);
         }
 
-        rightNode = new NumberNode(Double.parseDouble(number.toString()));
-        if (!expression.hasNext()) {
-          if (currentParent == null) {
-            currentParent = rightNode;
+        node = new NumberNode(Double.parseDouble(number.toString()));
+        if (!expression.hasNext() || nextChar == ')') {
+          if (temp == null) {
+            currentParent = node;
           } else {
-            temp.right = rightNode;
-            rightNode.parent = temp;
+            temp.right = node;
+            node.parent = temp;
           }
           continue;
         }
-
-        nextChar = expression.next();
-        opNode = generateOpNode(nextChar);
-
-        if (currentParent == null) {
-          currentParent = opNode;
-          opNode.left = rightNode;
-          rightNode.parent = opNode;
-          continue;
-        }
-
 
       } else {
         throw new RuntimeException("Unexpect symbol: " + nextChar);
       }
 
+      opNode = generateOpNode(nextChar);
+
+      if (temp == null) {
+        currentParent = opNode;
+        opNode.left = node;
+        node.parent = opNode;
+        nextChar = expression.next();
+        continue;
+      }
+
       if ((nextChar == '+' || nextChar == '-')
           && (temp.operator == '*' || temp.operator == '/')) {
-        temp.right = rightNode;
-        rightNode.parent = temp;
+        temp.right = node;
+        node.parent = temp;
         while (temp.parent != null) {
           temp = (OperatorNode) temp.parent;
           if (temp.operator == '+' || temp.operator == '-') {
@@ -130,13 +131,13 @@ public class Main {
       } else {
         opNode.parent = temp;
         temp.right = opNode;
-        opNode.left = rightNode;
-        rightNode.parent = opNode;
+        opNode.left = node;
+        node.parent = opNode;
 
       }
       currentParent = opNode;
-
-    } while (expression.hasNext() && (nextChar = expression.next()) != ')');
+      nextChar = expression.next();
+    } while (expression.hasNext() && nextChar != ')');
 
     while (currentParent.parent != null) {
       currentParent = currentParent.parent;
@@ -162,7 +163,36 @@ public class Main {
   }
 
   CompletableFuture<Double> calculate(Node root) {
+    if (root instanceof NumberNode) {
+      NumberNode numberNode = (NumberNode) root;
+      return CompletableFuture.completedFuture(numberNode.number);
+    } else if (root instanceof OperatorNode) {
+      OperatorNode operatorNode = (OperatorNode) root;
+      final char operator = operatorNode.operator;
+      CompletableFuture<Double> leftFuture = calculate(operatorNode.left);
+      CompletableFuture<Double> rightFuture = calculate(operatorNode.right);
 
+      return leftFuture.thenCombine(rightFuture, new BiFunction<Double, Double, Double>() {
+        @Override
+        public Double apply(Double l, Double r) {
+          switch (operator) {
+            case '+':
+              return l + r;
+            case '-':
+              return l - r;
+            case '*':
+              return l * r;
+            case '/':
+              return l / r;
+            default:
+              throw new RuntimeException("Unsupported operator: " + operator);
+          }
+        }
+      });
+    } else {
+      // todo
+      return CompletableFuture.completedFuture(0.0);
+    }
   }
 
   static class Node {
