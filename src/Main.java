@@ -38,7 +38,7 @@ public class Main {
       throw new RuntimeException("No expression!");
     }
 
-    // handle special first number such as -5, +3
+    // handle special first number with sign such as -5, +3
     char nextChar = expression.next();
     if (nextChar == '+' || nextChar == '-') {
       StringBuilder firstNumber = new StringBuilder();
@@ -110,28 +110,52 @@ public class Main {
         continue;
       }
 
-      if ((nextChar == '+' || nextChar == '-')
-          && (temp.operator == '*' || temp.operator == '/')) {
+      if (Operator.compare(nextChar, temp.operator) < 0) {
         temp.right = node;
         node.parent = temp;
         while (temp.parent != null) {
           temp = (OperatorNode) temp.parent;
-          if (temp.operator == '+' || temp.operator == '-') {
+          if (Operator.compare(nextChar, temp.operator) >= 0) {
             break;
           }
         }
 
-        opNode.left = temp;
-        if (temp.parent != null) {
-          OperatorNode tempParent = (OperatorNode) temp.parent;
-          if (tempParent.left == temp) {
-            tempParent.left = opNode;
+        if (temp.parent == null) {
+          opNode.left = temp;
+          temp.parent = opNode;
+        } else {
+          Node child;
+          if (temp.right instanceof OperatorNode) {
+            child = (OperatorNode) temp.right;
+            opNode.left = child;
+            child.parent = opNode;
+
+            temp.right = opNode;
+            opNode.parent = temp;
+          } else if (temp.left instanceof OperatorNode) {
+            child = (OperatorNode) temp.left;
+            opNode.left = child;
+            child.parent = opNode;
+
+            temp.left = opNode;
+            opNode.parent = temp;
           } else {
-            tempParent.right = opNode;
+            // normally, it will never reach here.
+            throw new RuntimeException("internal error");
           }
-          opNode.parent = tempParent;
         }
-        temp.parent = opNode;
+
+//        opNode.left = temp;
+//        if (temp.parent != null) {
+//          OperatorNode tempParent = (OperatorNode) temp.parent;
+//          if (tempParent.left == temp) {
+//            tempParent.left = opNode;
+//          } else {
+//            tempParent.right = opNode;
+//          }
+//          opNode.parent = tempParent;
+//        }
+//        temp.parent = opNode;
 
       } else {
         opNode.parent = temp;
@@ -141,6 +165,10 @@ public class Main {
 
       }
       currentParent = opNode;
+
+      if (!expression.hasNext()) {
+        throw new RuntimeException("Lack an expression after " + nextChar);
+      }
       nextChar = expression.next();
     } while (expression.hasNext() && nextChar != ')');
 
@@ -239,6 +267,43 @@ public class Main {
 
     public NumberNode(double number) {
       this.number = number;
+    }
+  }
+
+  static enum Operator {
+    ADD('+', 1),
+    MINUS('-', 1),
+    MULTIPLY('*', 2),
+    DIVIDE('/', 2);
+
+    private char sign;
+    private int priority;
+
+    private Operator(char sign, int priority) {
+      this.sign = sign;
+      this.priority = priority;
+    }
+
+    public static Operator fromChar(char sign) {
+      switch (sign) {
+        case '+':
+          return ADD;
+        case '-':
+          return MINUS;
+        case '*':
+          return MULTIPLY;
+        case '/':
+          return DIVIDE;
+        default:
+          throw new RuntimeException("Unsupported sign: " + sign);
+      }
+    }
+
+    public static int compare(char sign1, char sign2) {
+      Operator op1 = fromChar(sign1);
+      Operator op2 = fromChar(sign2);
+
+      return op1.priority - op2.priority;
     }
   }
 }
