@@ -1,6 +1,8 @@
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiFunction;
 
 public class Main {
@@ -15,6 +17,9 @@ public class Main {
 
     System.out.println(new Main().evaluate(Arrays.asList(characters).iterator()));
   }
+
+  final Lock addLock = new ReentrantLock();
+  final Lock divideLock = new ReentrantLock();
 
   public double evaluate(Iterator<Character> expression) throws Exception {
     assert expression != null;
@@ -172,18 +177,38 @@ public class Main {
       CompletableFuture<Double> leftFuture = calculate(operatorNode.left);
       CompletableFuture<Double> rightFuture = calculate(operatorNode.right);
 
-      return leftFuture.thenCombine(rightFuture, new BiFunction<Double, Double, Double>() {
+      return leftFuture.thenCombineAsync(rightFuture, new BiFunction<Double, Double, Double>() {
         @Override
         public Double apply(Double l, Double r) {
           switch (operator) {
             case '+':
-              return l + r;
+              addLock.lock();
+              try {
+                return l + r;
+              } finally {
+                addLock.unlock();
+              }
             case '-':
-              return l - r;
+              addLock.lock();
+              try {
+                return l - r;
+              } finally {
+                addLock.unlock();
+              }
             case '*':
-              return l * r;
+              divideLock.lock();
+              try {
+                return l * r;
+              } finally {
+                divideLock.unlock();
+              }
             case '/':
-              return l / r;
+              divideLock.lock();
+              try {
+                return l / r;
+              } finally {
+                divideLock.unlock();
+              }
             default:
               throw new RuntimeException("Unsupported operator: " + operator);
           }
