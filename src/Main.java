@@ -7,7 +7,7 @@ import java.util.function.BiFunction;
 
 public class Main {
   public static void main(String[] args) throws Exception {
-    String expression = "(1+2*(3+4))";
+    String expression = "1+2+3";
     char[] chars = expression.toCharArray();
     Character[] characters = new Character[chars.length];
     int count = 0;
@@ -75,7 +75,7 @@ public class Main {
             temp.right = node;
             node.parent = temp;
           }
-          continue;
+          break;
         }
 
       } else if (Character.isDigit(nextChar)) {
@@ -93,7 +93,7 @@ public class Main {
             temp.right = node;
             node.parent = temp;
           }
-          continue;
+          break;
         }
 
       } else {
@@ -106,7 +106,9 @@ public class Main {
         currentParent = opNode;
         opNode.left = node;
         node.parent = opNode;
-        nextChar = expression.next();
+        if (!expression.hasNext()) {
+          throw new RuntimeException("Lack an expression after " + nextChar);
+        }
         continue;
       }
 
@@ -169,8 +171,7 @@ public class Main {
       if (!expression.hasNext()) {
         throw new RuntimeException("Lack an expression after " + nextChar);
       }
-      nextChar = expression.next();
-    } while (expression.hasNext() && nextChar != ')');
+    } while (expression.hasNext() && (nextChar = expression.next()) != '\0');
 
     while (currentParent.parent != null) {
       currentParent = currentParent.parent;
